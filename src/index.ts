@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { aiTao, TOOL_CONFIG } from "./ai-tao.js";
+import { aiTao } from "./ai-tao.js";
 
 const args = process.argv.slice(2);
 
@@ -8,61 +8,48 @@ const showHelp = args.includes("-h") || args.includes("--help");
 
 if (showHelp) {
   console.log(`
-ai-tao - Setup and maintain AI assistant configuration files
+ai-tao - Install AI coding guideline commands
 
-Supports: Claude Code, Cursor, Windsurf, GitHub Copilot
+Supports: Claude Code, Cursor, GitHub Copilot, Windsurf, Gemini CLI
 
 Usage:
-  bunx ai-tao
-  npx ai-tao
+  bunx ai-tao [options]
 
 Options:
   -h, --help     Show this help message
 
 Description:
-  This tool creates or updates AI assistant configuration files with
-  a template fetched from the official ai-tao repository.
+  This tool installs slash commands for AI assistants that fetch and apply
+  coding guidelines to your project.
 
-  On first run, you'll be prompted to:
-    1. Select which AI tools to configure
-    2. Choose shared (committed) or local (gitignored) files
-    3. Select frameworks/tools your project uses (flavors)
+  On first run, you'll be prompted to select which AI tools to configure.
 
-  Supported tools:
-    - Claude Code: CLAUDE.md / CLAUDE.local.md
-    - Cursor: .cursorrules
-    - Windsurf: .windsurfrules
-    - GitHub Copilot: .github/copilot-instructions.md
+  Supported tools and their command locations:
+    - Claude Code:     .claude/commands/tao.md
+    - Cursor:          .cursor/commands/tao.md
+    - GitHub Copilot:  .github/prompts/tao.prompt.md
+    - Windsurf:        .windsurf/workflows/tao.md
+    - Gemini CLI:      .gemini/commands/tao.md
 
-  The managed section is marked with:
+  After installation, run /tao in your AI assistant to:
+    1. Fetch the latest guidelines from ai-tao
+    2. Detect your project's frameworks (Next.js, etc.)
+    3. Apply guidelines to your project's rules file
+
+  Guidelines are applied using markers:
     <!-- AI-TAO:START -->
-    ... template content ...
+    ... guidelines ...
     <!-- AI-TAO:END -->
 
-  Any content outside these markers will be preserved when updating.
+  Your custom content outside these markers is always preserved.
 
 Examples:
-  bunx ai-tao    # Interactive setup or update
+  bunx ai-tao          # Interactive setup or update existing commands
 `);
   process.exit(0);
 }
 
-aiTao()
-  .then((result) => {
-    console.log("");
-    for (const file of result.files) {
-      const action = file.created ? "Created" : "Updated";
-      const toolName = TOOL_CONFIG[file.tool].name;
-      console.log(`${action} ${file.filename} (${toolName})`);
-    }
-    if (result.flavorsAdded.length > 0) {
-      console.log(`Flavors: ${result.flavorsAdded.join(", ")}`);
-    }
-    if (result.gitignoreUpdated) {
-      console.log(`Added files to .gitignore`);
-    }
-  })
-  .catch((error: Error) => {
-    console.error("Error:", error.message);
-    process.exit(1);
-  });
+aiTao().catch((error: Error) => {
+  console.error("Error:", error.message);
+  process.exit(1);
+});

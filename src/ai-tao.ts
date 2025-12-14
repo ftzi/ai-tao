@@ -1,53 +1,56 @@
-import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  appendFileSync,
-  mkdirSync,
-} from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import * as readline from "readline";
 
 const BASE_URL =
   "https://raw.githubusercontent.com/ftzi/ai-tao/refs/heads/main/templates";
-const TEMPLATE_URL = `${BASE_URL}/main.md`;
-const FLAVOR_URL = (flavor: string) => `${BASE_URL}/flavors/${flavor}.md`;
 
-const START_MARKER = "<!-- AI-TAO:START -->";
-const END_MARKER = "<!-- AI-TAO:END -->";
-
-export const AVAILABLE_FLAVORS = ["nextjs"] as const;
-export type Flavor = (typeof AVAILABLE_FLAVORS)[number];
-
-export const SUPPORTED_TOOLS = ["claude", "cursor", "windsurf", "copilot"] as const;
+export const SUPPORTED_TOOLS = [
+  "claude",
+  "cursor",
+  "copilot",
+  "windsurf",
+  "gemini",
+] as const;
 export type Tool = (typeof SUPPORTED_TOOLS)[number];
 
 export type ToolConfig = {
   name: string;
-  sharedFile: string;
-  localFile: string;
+  rulesFile: string;
+  commandDir: string;
+  commandFile: string;
 };
 
 export const TOOL_CONFIG: Record<Tool, ToolConfig> = {
   claude: {
     name: "Claude Code",
-    sharedFile: "CLAUDE.md",
-    localFile: "CLAUDE.local.md",
+    rulesFile: "CLAUDE.md",
+    commandDir: ".claude/commands",
+    commandFile: "tao.md",
   },
   cursor: {
     name: "Cursor",
-    sharedFile: ".cursorrules",
-    localFile: ".cursorrules",
-  },
-  windsurf: {
-    name: "Windsurf",
-    sharedFile: ".windsurfrules",
-    localFile: ".windsurfrules",
+    rulesFile: ".cursorrules",
+    commandDir: ".cursor/commands",
+    commandFile: "tao.md",
   },
   copilot: {
     name: "GitHub Copilot",
-    sharedFile: ".github/copilot-instructions.md",
-    localFile: ".github/copilot-instructions.md",
+    rulesFile: ".github/copilot-instructions.md",
+    commandDir: ".github/prompts",
+    commandFile: "tao.prompt.md",
+  },
+  windsurf: {
+    name: "Windsurf",
+    rulesFile: ".windsurfrules",
+    commandDir: ".windsurf/workflows",
+    commandFile: "tao.md",
+  },
+  gemini: {
+    name: "Gemini CLI",
+    rulesFile: "GEMINI.md",
+    commandDir: ".gemini/commands",
+    commandFile: "tao.md",
   },
 };
 
@@ -56,21 +59,14 @@ export type AiTaoOptions = {
   // For testing: skip interactive prompts
   _skipPrompts?: boolean;
   _selectedTools?: Tool[];
-  _isLocal?: boolean;
-  _selectedFlavors?: Flavor[];
-  // For testing: provide template content directly
-  _templateContent?: string;
 };
 
 export type AiTaoResult = {
-  files: Array<{
+  commands: Array<{
     tool: Tool;
-    filename: string;
+    commandPath: string;
     created: boolean;
   }>;
-  gitignoreUpdated: boolean;
-  flavorsAdded: Flavor[];
-  isLocal: boolean;
 };
 
 // Interactive prompt helpers
@@ -99,11 +95,13 @@ export async function promptToolSelection(
 
   const toolList = SUPPORTED_TOOLS.map((tool, i) => {
     const config = TOOL_CONFIG[tool];
-    return `  ${i + 1}. ${config.name} (${config.sharedFile})`;
+    return `  ${i + 1}. ${config.name}`;
   }).join("\n");
 
   console.log(toolList);
-  console.log("\nEnter numbers separated by spaces (e.g., '1 2 3'), or 'all':");
+  console.log(
+    "\nEnter numbers separated by spaces (e.g., '1 2 3'), or 'all':"
+  );
 
   const answer = await promptQuestion(rl, "> ");
 
@@ -125,294 +123,115 @@ export async function promptToolSelection(
   return numbers.map((n) => SUPPORTED_TOOLS[n - 1]);
 }
 
-export async function promptLocalOrShared(
-  rl: readline.Interface
-): Promise<boolean> {
-  console.log("\nShould the configuration files be:\n");
-  console.log("  1. Shared (committed to git)");
-  console.log("  2. Local (added to .gitignore)\n");
-
-  const answer = await promptQuestion(rl, "Enter 1 or 2 [1]: ");
-
-  return answer === "2" || answer === "local" || answer === "l";
-}
-
-export async function promptFlavorSelection(
-  rl: readline.Interface
-): Promise<Flavor[]> {
-  console.log("\nWhich frameworks/tools is your project using?\n");
-
-  const flavorList = AVAILABLE_FLAVORS.map((flavor, i) => {
-    return `  ${i + 1}. ${flavor}`;
-  }).join("\n");
-
-  console.log(flavorList);
-  console.log("  0. None\n");
-  console.log("Enter numbers separated by spaces, or press Enter for none:");
-
-  const answer = await promptQuestion(rl, "> ");
-
-  if (!answer || answer === "0" || answer === "none" || answer === "n") {
-    return [];
-  }
-
-  const numbers = answer
-    .split(/[\s,]+/)
-    .map((n) => parseInt(n, 10))
-    .filter((n) => !isNaN(n) && n >= 1 && n <= AVAILABLE_FLAVORS.length);
-
-  return numbers.map((n) => AVAILABLE_FLAVORS[n - 1]);
-}
-
-export async function fetchTemplate(): Promise<string> {
-  const response = await fetch(TEMPLATE_URL);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch template: ${response.status} ${response.statusText}`
-    );
-  }
-  return response.text();
-}
-
-export async function fetchFlavor(flavor: Flavor): Promise<string> {
-  const response = await fetch(FLAVOR_URL(flavor));
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch flavor '${flavor}': ${response.status} ${response.statusText}`
-    );
-  }
-  return response.text();
-}
-
-export function wrapWithMarkers(content: string): string {
-  return `${START_MARKER}\n${content}\n${END_MARKER}`;
-}
-
-export function updateAiTaoSection(
-  existingContent: string,
-  newTemplateContent: string
-): string {
-  const wrappedContent = wrapWithMarkers(newTemplateContent);
-
-  const startIndex = existingContent.indexOf(START_MARKER);
-  const endIndex = existingContent.indexOf(END_MARKER);
-
-  // No existing markers - append the wrapped content
-  if (startIndex === -1 || endIndex === -1) {
-    // If file has content, add a newline separator
-    if (existingContent.trim()) {
-      return `${existingContent.trimEnd()}\n\n${wrappedContent}\n`;
-    }
-    return `${wrappedContent}\n`;
-  }
-
-  // Replace existing section
-  const before = existingContent.slice(0, startIndex);
-  const after = existingContent.slice(endIndex + END_MARKER.length);
-
-  return `${before}${wrappedContent}${after}`;
-}
-
-export function hasAiTaoSection(content: string): boolean {
-  return content.includes(START_MARKER) && content.includes(END_MARKER);
-}
-
-export function getFileForTool(
-  tool: Tool,
-  isLocal: boolean,
-  cwd: string
-): string {
+export function generateCommandContent(tool: Tool): string {
   const config = TOOL_CONFIG[tool];
-  const filename = isLocal ? config.localFile : config.sharedFile;
-  return join(cwd, filename);
+  const rulesFile = config.rulesFile;
+
+  return `Apply AI-TAO coding guidelines to this project.
+
+## Instructions
+
+1. Fetch the base guidelines from:
+   ${BASE_URL}/main.md
+
+2. Detect the project's frameworks and fetch applicable flavor guidelines:
+   - If Next.js project (has next.config.* or package.json with "next" dependency):
+     ${BASE_URL}/flavors/nextjs.md
+
+3. Update this project's \`${rulesFile}\`:
+   - If the file doesn't exist, create it with the fetched guidelines wrapped in markers
+   - If it exists, look for \`<!-- AI-TAO:START -->\` and \`<!-- AI-TAO:END -->\` markers
+   - If markers exist, replace content between them with the new guidelines
+   - If no markers, add the guidelines with markers at the end of the file
+   - ALWAYS preserve user content outside the markers
+
+4. Report what was updated.
+`;
 }
 
-export function ensureGitignore(files: string[], cwd: string): boolean {
-  const gitignorePath = join(cwd, ".gitignore");
-  let updated = false;
-
-  let content = "";
-  if (existsSync(gitignorePath)) {
-    content = readFileSync(gitignorePath, "utf-8");
-  }
-
-  const lines = content.split("\n").map((line) => line.trim());
-  const toAdd: string[] = [];
-
-  for (const file of files) {
-    // Get relative path from cwd
-    const relativePath = file.startsWith(cwd)
-      ? file.slice(cwd.length + 1)
-      : file;
-
-    if (!lines.includes(relativePath)) {
-      toAdd.push(relativePath);
-    }
-  }
-
-  if (toAdd.length > 0) {
-    const needsNewline = content.length > 0 && !content.endsWith("\n");
-    const addition = toAdd.join("\n") + "\n";
-
-    if (!existsSync(gitignorePath)) {
-      writeFileSync(gitignorePath, addition, "utf-8");
-    } else {
-      appendFileSync(
-        gitignorePath,
-        `${needsNewline ? "\n" : ""}${addition}`,
-        "utf-8"
-      );
-    }
-    updated = true;
-  }
-
-  return updated;
+export function getCommandPath(tool: Tool, cwd: string): string {
+  const config = TOOL_CONFIG[tool];
+  return join(cwd, config.commandDir, config.commandFile);
 }
 
-export function detectExistingTools(cwd: string): {
-  tool: Tool;
-  filepath: string;
-  isLocal: boolean;
-}[] {
-  const found: { tool: Tool; filepath: string; isLocal: boolean }[] = [];
+export function detectExistingCommands(
+  cwd: string
+): { tool: Tool; commandPath: string }[] {
+  const found: { tool: Tool; commandPath: string }[] = [];
 
   for (const tool of SUPPORTED_TOOLS) {
-    const config = TOOL_CONFIG[tool];
-
-    // Check local file first (for Claude which has a separate local file)
-    if (config.localFile !== config.sharedFile) {
-      const localPath = join(cwd, config.localFile);
-      if (existsSync(localPath)) {
-        const content = readFileSync(localPath, "utf-8");
-        if (hasAiTaoSection(content)) {
-          found.push({ tool, filepath: localPath, isLocal: true });
-          continue;
-        }
-      }
-    }
-
-    // Check shared file
-    const sharedPath = join(cwd, config.sharedFile);
-    if (existsSync(sharedPath)) {
-      const content = readFileSync(sharedPath, "utf-8");
-      if (hasAiTaoSection(content)) {
-        found.push({ tool, filepath: sharedPath, isLocal: false });
-      }
+    const commandPath = getCommandPath(tool, cwd);
+    if (existsSync(commandPath)) {
+      found.push({ tool, commandPath });
     }
   }
 
   return found;
 }
 
-export async function aiTao(
-  options: AiTaoOptions = {}
-): Promise<AiTaoResult> {
-  const {
-    cwd = process.cwd(),
-    _skipPrompts = false,
-    _selectedTools,
-    _isLocal,
-    _selectedFlavors,
-    _templateContent,
-  } = options;
+export async function aiTao(options: AiTaoOptions = {}): Promise<AiTaoResult> {
+  const { cwd = process.cwd(), _skipPrompts = false, _selectedTools } = options;
 
-  // Detect existing AI-TAO managed files
-  const existingTools = detectExistingTools(cwd);
-  const isUpdateMode = existingTools.length > 0;
+  // Detect existing command files
+  const existingCommands = detectExistingCommands(cwd);
 
   let selectedTools: Tool[];
-  let isLocal: boolean;
-  let flavors: Flavor[];
 
-  if (isUpdateMode) {
-    // Update mode: just update existing files, no flavor prompts
-    selectedTools = existingTools.map((e) => e.tool);
-    isLocal = existingTools.some((e) => e.isLocal);
-    flavors = []; // Don't change flavors on update
+  if (existingCommands.length > 0) {
+    // Update mode: just update existing command files
+    selectedTools = existingCommands.map((e) => e.tool);
+    console.log(
+      `\nUpdating existing AI-TAO commands for: ${selectedTools.map((t) => TOOL_CONFIG[t].name).join(", ")}`
+    );
   } else {
-    // Setup mode: prompt for tools, local/shared, and flavors
+    // Setup mode: prompt for tools
     if (_skipPrompts) {
       selectedTools = _selectedTools ?? ["claude"];
-      isLocal = _isLocal ?? false;
-      flavors = _selectedFlavors ?? [];
     } else {
       const rl = createReadlineInterface();
       try {
-        console.log("No AI-TAO configuration found.");
+        console.log("\n🥋 AI-TAO: Install coding guidelines for AI assistants");
         selectedTools = await promptToolSelection(rl);
-        isLocal = await promptLocalOrShared(rl);
-        flavors = await promptFlavorSelection(rl);
       } finally {
         rl.close();
       }
     }
   }
 
-  // Fetch template from GitHub (or use provided test content)
-  const templateContent = _templateContent ?? (await fetchTemplate());
-
-  // Fetch all requested flavors in parallel
-  const flavorContents = await Promise.all(
-    flavors.map(async (flavor) => {
-      const content = await fetchFlavor(flavor);
-      return { flavor, content };
-    })
-  );
-
-  // Combine base template with flavors
-  let combinedContent = templateContent;
-  for (const { content } of flavorContents) {
-    combinedContent += `\n\n${content}`;
-  }
-
-  const results: AiTaoResult["files"] = [];
-  const filesToGitignore: string[] = [];
+  const results: AiTaoResult["commands"] = [];
 
   for (const tool of selectedTools) {
     const config = TOOL_CONFIG[tool];
-    const filename = isLocal ? config.localFile : config.sharedFile;
-    const filepath = join(cwd, filename);
+    const commandPath = getCommandPath(tool, cwd);
+    const commandDir = dirname(commandPath);
 
-    // Ensure directory exists (for copilot's .github folder)
-    const dir = dirname(filepath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+    // Ensure directory exists
+    if (!existsSync(commandDir)) {
+      mkdirSync(commandDir, { recursive: true });
     }
 
-    const fileExists = existsSync(filepath);
-    let finalContent: string;
+    const fileExists = existsSync(commandPath);
+    const content = generateCommandContent(tool);
 
-    if (fileExists) {
-      const existingContent = readFileSync(filepath, "utf-8");
-      finalContent = updateAiTaoSection(existingContent, combinedContent);
-    } else {
-      finalContent = `${wrapWithMarkers(combinedContent)}\n`;
-    }
-
-    writeFileSync(filepath, finalContent, "utf-8");
+    writeFileSync(commandPath, content, "utf-8");
 
     results.push({
       tool,
-      filename,
+      commandPath: join(config.commandDir, config.commandFile),
       created: !fileExists,
     });
-
-    // Track files to gitignore for local mode
-    if (isLocal) {
-      filesToGitignore.push(filename);
-    }
   }
 
-  // Handle .gitignore for local mode
-  let gitignoreUpdated = false;
-  if (isLocal && filesToGitignore.length > 0) {
-    gitignoreUpdated = ensureGitignore(filesToGitignore, cwd);
+  // Print success message
+  console.log("\n✅ AI-TAO commands installed!\n");
+  console.log("Usage: Run the /tao command in your AI assistant to apply guidelines.\n");
+
+  for (const result of results) {
+    const action = result.created ? "Created" : "Updated";
+    console.log(`  ${action}: ${result.commandPath}`);
   }
 
-  return {
-    files: results,
-    gitignoreUpdated,
-    flavorsAdded: flavors,
-    isLocal,
-  };
+  console.log("");
+
+  return { commands: results };
 }

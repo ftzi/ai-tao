@@ -1,7 +1,7 @@
 {
   "name": "ai-tao",
   "version": "0.2.0",
-  "description": "Setup and maintain CLAUDE.md files for your projects",
+  "description": "Setup and maintain AI assistant configuration files for your projects",
   "type": "module",
   "bin": {
     "ai-tao": "./dist/index.js"

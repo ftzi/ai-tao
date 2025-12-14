@@ -1,66 +1,61 @@
+<div align="center">
+
+<img src="logo.svg" alt="ai-tao logo" width="120"/>
+
 # ai-tao
 
-Setup and maintain AI assistant configuration files for your projects with opinionated best practices.
+Install AI coding guideline commands for your projects.
 
-Supports multiple AI coding assistants:
-- **Claude Code** (`CLAUDE.md` / `CLAUDE.local.md`)
-- **Cursor** (`.cursorrules`)
-- **Windsurf** (`.windsurfrules`)
-- **GitHub Copilot** (`.github/copilot-instructions.md`)
+</div>
 
-## Installation
+## Supported AI Tools
 
-```bash
-# Using bunx (no installation required)
-bunx ai-tao
+| Tool | Command Location |
+|------|------------------|
+| **Claude Code** | `.claude/commands/tao.md` |
+| **Cursor** | `.cursor/commands/tao.md` |
+| **GitHub Copilot** | `.github/prompts/tao.prompt.md` |
+| **Windsurf** | `.windsurf/workflows/tao.md` |
+| **Gemini CLI** | `.gemini/commands/tao.md` |
 
-# Using npx
-npx ai-tao
-```
-
-## Usage
+## Quick Start
 
 ```bash
-# Run interactive setup (first time) or update existing files
 bunx ai-tao
 ```
 
-On first run, you'll be prompted to:
-1. Select which AI tools to configure
-2. Choose between shared (committed) or local (gitignored) files
-3. Select frameworks/tools your project uses (flavors)
+Select which AI tools you use, and ai-tao installs the `/tao` command for each.
 
-On subsequent runs, ai-tao automatically detects and updates existing configuration files.
+Then, in your AI assistant, run:
 
-## Available Flavors
+```
+/tao
+```
 
-| Flavor | Description |
-|--------|-------------|
-| `nextjs` | Next.js App Router conventions, Server Components, Server Actions, routing patterns |
+This fetches the latest coding guidelines and applies them to your project's rules file (e.g., `CLAUDE.md`, `.cursorrules`).
 
-More flavors coming soon! Contributions welcome.
+## How It Works
 
-## What it does
+1. **Install**: Run `bunx ai-tao` to install slash commands for your AI tools
+2. **Use**: Run `/tao` in your AI assistant whenever you want to update guidelines
+3. **Customize**: Add your own content to the rules file - it's preserved on updates
 
-1. **Detects** existing AI-TAO managed files in your project
-2. **Prompts** for tool selection, local/shared preference, and flavors (on first run)
-3. **Fetches** the latest template from the [ai-tao repository](https://github.com/ftzi/ai-tao)
-4. **Creates or updates** configuration files for selected AI tools
-5. **Adds framework-specific guidance** based on selected flavors
-6. **Preserves** any custom content you've added outside the managed section
-7. **Adds to .gitignore** (local mode only)
+The `/tao` command:
+- Fetches the latest guidelines from [ai-tao](https://github.com/ftzi/ai-tao)
+- Detects your project's frameworks (Next.js, etc.) and applies relevant flavors
+- Updates your rules file using markers to preserve your custom content
 
 ## Managed Section
 
-The template content is wrapped in markers:
+When `/tao` runs, it wraps the guidelines in markers:
 
 ```markdown
 <!-- AI-TAO:START -->
-... template content from GitHub ...
+... guidelines from ai-tao ...
 <!-- AI-TAO:END -->
 ```
 
-You can add your own project-specific content **outside** these markers, and it will be preserved when you update:
+Your custom content **outside** these markers is always preserved:
 
 ```markdown
 # My Project-Specific Notes
@@ -68,7 +63,7 @@ You can add your own project-specific content **outside** these markers, and it 
 Custom content here is preserved!
 
 <!-- AI-TAO:START -->
-... auto-managed template ...
+... auto-managed guidelines ...
 <!-- AI-TAO:END -->
 
 ## More Custom Content
@@ -76,31 +71,38 @@ Custom content here is preserved!
 This is also preserved!
 ```
 
-## Local vs Shared Mode
+## Rules Files
 
-When setting up for the first time, you choose between:
+Each AI tool has its own rules file that `/tao` updates:
 
-- **Shared mode**: Files are committed to git (team-wide configuration)
-- **Local mode**: Files are added to `.gitignore` (personal preferences)
+| Tool | Rules File |
+|------|------------|
+| Claude Code | `CLAUDE.md` |
+| Cursor | `.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Windsurf | `.windsurfrules` |
+| Gemini CLI | `GEMINI.md` |
 
-For Claude Code, local mode uses `CLAUDE.local.md` instead of `CLAUDE.md`.
-For other tools, the same file is used but added to `.gitignore`.
+## Available Flavors
 
-## Supported Tools
+Flavors are automatically detected based on your project:
 
-| Tool | Shared File | Local File |
-|------|-------------|------------|
-| Claude Code | `CLAUDE.md` | `CLAUDE.local.md` |
-| Cursor | `.cursorrules` | `.cursorrules` (gitignored) |
-| Windsurf | `.windsurfrules` | `.windsurfrules` (gitignored) |
-| GitHub Copilot | `.github/copilot-instructions.md` | `.github/copilot-instructions.md` (gitignored) |
+| Flavor | Detection |
+|--------|-----------|
+| `nextjs` | `next.config.*` or `"next"` in package.json |
+
+More flavors coming soon! Contributions welcome.
+
+## Updating Commands
+
+Run `bunx ai-tao` again to update the command files themselves. This is only needed if the command format changes - the guidelines are always fetched fresh when you run `/tao`.
 
 ## Contributing Flavors
 
 To add a new flavor:
 
 1. Create a new file in `templates/flavors/<flavor-name>.md`
-2. Add the flavor name to `AVAILABLE_FLAVORS` in `src/ai-tao.ts`
+2. Update the detection logic in the command template
 3. Submit a PR!
 
 ## License
